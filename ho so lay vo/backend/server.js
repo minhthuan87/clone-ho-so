@@ -31,8 +31,8 @@ if (activeDist) {
   app.use(express.static(activeDist));
 }
 
-// Storage configuration for Multer
-const storage = multer.diskStorage({
+// Storage configuration for Multer with fallback for serverless read-only environment
+const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
@@ -43,25 +43,41 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage });
+const uploadDisk = multer({ storage: diskStorage });
+const uploadMemory = multer({ storage: multer.memoryStorage() });
 
-// Store saved profiles in local JSON file
+// Store saved profiles in local JSON file with in-memory fallback for Vercel
 const profilesFilePath = path.join(__dirname, 'saved_profiles.json');
-if (!fs.existsSync(profilesFilePath)) {
-  fs.writeFileSync(profilesFilePath, JSON.stringify([]), 'utf8');
+let inMemoryProfiles = [];
+
+if (fs.existsSync(profilesFilePath)) {
+  try {
+    const data = fs.readFileSync(profilesFilePath, 'utf8');
+    inMemoryProfiles = JSON.parse(data);
+  } catch (e) {
+    inMemoryProfiles = [];
+  }
 }
 
 function getSavedProfiles() {
   try {
-    const data = fs.readFileSync(profilesFilePath, 'utf8');
-    return JSON.parse(data);
+    if (fs.existsSync(profilesFilePath)) {
+      const data = fs.readFileSync(profilesFilePath, 'utf8');
+      return JSON.parse(data);
+    }
   } catch (e) {
-    return [];
+    // Fallback to in-memory store
   }
+  return inMemoryProfiles;
 }
 
 function saveProfiles(profiles) {
-  fs.writeFileSync(profilesFilePath, JSON.stringify(profiles, null, 2), 'utf8');
+  inMemoryProfiles = profiles;
+  try {
+    fs.writeFileSync(profilesFilePath, JSON.stringify(profiles, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Could not write saved_profiles.json (read-only filesystem on serverless)');
+  }
 }
 
 // Routes
@@ -71,16 +87,30 @@ app.get('/', (req, res) => {
   res.json({ message: 'Ho So Backend API is running!', frontendUrl: 'http://localhost:5173' });
 });
 
-// 1. Upload photo endpoint
-app.post('/api/upload', upload.single('photo'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, message: 'Không tìm thấy file tải lên!' });
-  }
-  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-  res.json({
-    success: true,
-    fileUrl: fileUrl,
-    filename: req.file.filename
+// 1. Upload photo endpoint (Supports disk upload or base64 fallback)
+app.post('/api/upload', (req, res) => {
+  uploadDisk.single('photo')(req, res, (err) => {
+    if (!err && req.file) {
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+      return res.json({
+        success: true,
+        fileUrl: fileUrl,
+        filename: req.file.filename
+      });
+    }
+
+    // Disk upload failed (e.g. read-only filesystem), fallback to memory upload -> Base64
+    uploadMemory.single('photo')(req, res, (memErr) => {
+      if (memErr || !req.file) {
+        return res.status(400).json({ success: false, message: 'Không tìm thấy file tải lên!' });
+      }
+      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      return res.json({
+        success: true,
+        fileUrl: base64Image,
+        filename: req.file.originalname
+      });
+    });
   });
 });
 
