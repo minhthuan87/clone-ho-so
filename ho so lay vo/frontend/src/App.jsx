@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import HeaderNav from './components/HeaderNav.jsx';
 import CanvasEditor from './components/CanvasEditor.jsx';
 import PhotoUploader from './components/PhotoUploader.jsx';
