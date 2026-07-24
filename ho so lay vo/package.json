@@ -1,0 +1,9 @@
+{
+  "name": "ho-so-lay-vo-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\"",
+    "start": "npx concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\""
+  }
+}
