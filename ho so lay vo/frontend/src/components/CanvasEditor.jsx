@@ -28,14 +28,14 @@ export default function CanvasEditor({
     notes = []
   } = docData;
 
-  // 1. Move Sticky Note
-  const handleNoteMouseDown = (e, noteId, currentX, currentY, idx) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
+  // 1. Move Sticky Note (Mouse & Touch support)
+  const handleNoteStart = (e, noteId, currentX, currentY, idx) => {
+    if (e.button && e.button !== 0) return;
     e.stopPropagation();
 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const isTouch = e.type === 'touchstart';
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
     const defaultX = orientation === 'portrait' ? 410 : 680;
     const defaultY = 20 + idx * 75;
@@ -43,9 +43,12 @@ export default function CanvasEditor({
     const initialX = currentX !== undefined ? currentX : defaultX;
     const initialY = currentY !== undefined ? currentY : defaultY;
 
-    const handleMouseMove = (moveEvent) => {
-      const deltaX = (moveEvent.clientX - startX) / (zoomScale || 1);
-      const deltaY = (moveEvent.clientY - startY) / (zoomScale || 1);
+    const handleMove = (moveEvent) => {
+      const moveX = moveEvent.type.startsWith('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const moveY = moveEvent.type.startsWith('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+      const deltaX = (moveX - clientX) / (zoomScale || 1);
+      const deltaY = (moveY - clientY) / (zoomScale || 1);
 
       const newX = Math.round(initialX + deltaX);
       const newY = Math.round(initialY + deltaY);
@@ -55,28 +58,38 @@ export default function CanvasEditor({
       }
     };
 
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+    const handleEnd = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    if (isTouch) {
+      window.addEventListener('touchmove', handleMove, { passive: false });
+      window.addEventListener('touchend', handleEnd);
+    } else {
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleEnd);
+    }
   };
 
-  // 2. Resize Sticky Note (Drag bottom-right corner)
-  const handleResizeMouseDown = (e, noteId, currentWidth, currentHeight) => {
-    e.preventDefault();
+  // 2. Resize Sticky Note (Mouse & Touch support)
+  const handleResizeStart = (e, noteId, currentWidth, currentHeight) => {
     e.stopPropagation();
 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const isTouch = e.type === 'touchstart';
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
     const initialWidth = currentWidth || 210;
     const initialHeight = currentHeight || 110;
 
-    const handleMouseMove = (moveEvent) => {
-      const deltaX = (moveEvent.clientX - startX) / (zoomScale || 1);
-      const deltaY = (moveEvent.clientY - startY) / (zoomScale || 1);
+    const handleMove = (moveEvent) => {
+      const moveX = moveEvent.type.startsWith('touch') ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const moveY = moveEvent.type.startsWith('touch') ? moveEvent.touches[0].clientY : moveEvent.clientY;
+
+      const deltaX = (moveX - clientX) / (zoomScale || 1);
+      const deltaY = (moveY - clientY) / (zoomScale || 1);
 
       const newW = Math.max(130, Math.min(500, Math.round(initialWidth + deltaX)));
       const newH = Math.max(70, Math.min(450, Math.round(initialHeight + deltaY)));
@@ -86,63 +99,68 @@ export default function CanvasEditor({
       }
     };
 
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+    const handleEnd = () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // 3. Rotate Sticky Note (Drag or click rotate button)
-  const handleRotateMouseDown = (e, noteId, currentRotation) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const startX = e.clientX;
-    const initialRot = currentRotation || 0;
-
-    const handleMouseMove = (moveEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const newRot = Math.round((initialRot + deltaX * 0.8) % 360);
-
-      if (onUpdateNote) {
-        onUpdateNote(noteId, { rotation: newRot });
-      }
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  const handleRotateClick = (e, noteId, currentRotation) => {
-    e.stopPropagation();
-    const nextRot = ((currentRotation || 0) + 15) % 360;
-    if (onUpdateNote) {
-      onUpdateNote(noteId, { rotation: nextRot });
+    if (isTouch) {
+      window.addEventListener('touchmove', handleMove, { passive: false });
+      window.addEventListener('touchend', handleEnd);
+    } else {
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleEnd);
     }
   };
 
+  // 3. Step Rotation Buttons for Sticky Note (-5°, 0°, +5°)
+  const handleRotateStep = (e, noteId, currentRot, delta, isReset = false) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let newRot = isReset ? 0 : ((currentRot || 0) + delta);
+    if (newRot > 180) newRot -= 360;
+    if (newRot < -180) newRot += 360;
+    if (onUpdateNote) {
+      onUpdateNote(noteId, { rotation: newRot });
+    }
+  };
+
+  const docWidth = orientation === 'portrait' ? 650 : 960;
+  const docHeight = orientation === 'portrait' ? 920 : 650;
+  const scaledWidth = docWidth * zoomScale;
+  const scaledHeight = docHeight * zoomScale;
+
   return (
-    <div className="canvas-viewport">
-      {/* Paper Document Container with dynamic scale transformation */}
+    <div className="canvas-viewport" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: '24px 12px 60px 12px' }}>
+      {/* Centered Document Wrapper ensuring all 4 corners are clearly visible */}
       <div 
         style={{
-          transform: `scale(${zoomScale}) ${isTiltMode ? 'rotateY(-12deg) rotateX(6deg)' : ''}`,
-          transformOrigin: 'top center',
-          transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          width: `${scaledWidth}px`,
+          height: `${scaledHeight}px`,
+          position: 'relative',
+          margin: '0 auto',
+          transition: 'width 0.3s ease, height 0.3s ease',
+          flexShrink: 0
         }}
       >
         <div 
-          ref={docRef}
-          className={`paper-document ${orientation}`}
+          style={{
+            width: `${docWidth}px`,
+            height: `${docHeight}px`,
+            transform: `scale(${zoomScale}) ${isTiltMode ? 'rotateY(-12deg) rotateX(6deg)' : ''}`,
+            transformOrigin: 'top left',
+            transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            position: 'absolute',
+            top: 0,
+            left: 0
+          }}
         >
+          <div 
+            ref={docRef}
+            className={`paper-document ${orientation}`}
+          >
           {/* Decorative elements */}
           <div className="paper-clip"></div>
           <div className="paper-tape"></div>
@@ -287,7 +305,8 @@ export default function CanvasEditor({
               <div 
                 key={note.id || idx} 
                 className="sticky-note"
-                onMouseDown={(e) => handleNoteMouseDown(e, note.id, note.x, note.y, idx)}
+                onMouseDown={(e) => handleNoteStart(e, note.id, note.x, note.y, idx)}
+                onTouchStart={(e) => handleNoteStart(e, note.id, note.x, note.y, idx)}
                 style={{ 
                   backgroundColor: note.color || '#fff3cd', 
                   left: `${posX}px`,
@@ -304,69 +323,88 @@ export default function CanvasEditor({
                   display: 'flex',
                   flexDirection: 'column',
                   justify: 'space-between',
-                  padding: '8px 12px 14px 12px'
+                  padding: '8px 12px 14px 12px',
+                  borderRadius: '8px',
+                  touchAction: 'none'
                 }}
               >
-                {/* Top Control Bar with Drag icon & Rotate Handle */}
+                {/* Top Control Bar with Drag Handle & Easy Step Rotate Buttons */}
                 <div style={{ 
                   display: 'flex', 
                   justifyContent: 'space-between', 
                   alignItems: 'center', 
-                  marginBottom: '4px',
+                  marginBottom: '6px',
                   borderBottom: '1px dashed rgba(0,0,0,0.15)',
-                  paddingBottom: '2px'
+                  paddingBottom: '4px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#64748b' }}>
-                    <Move size={12} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>
+                    <Move size={13} />
                     <span>Kéo di chuyển</span>
                   </div>
 
-                  {/* Rotate Button / Drag handle */}
-                  <div 
-                    onClick={(e) => handleRotateClick(e, note.id, rotation)}
-                    onMouseDown={(e) => handleRotateMouseDown(e, note.id, rotation)}
-                    style={{ 
-                      cursor: 'pointer', 
-                      background: 'rgba(0,0,0,0.08)', 
-                      padding: '2px 6px', 
-                      borderRadius: '10px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '3px',
-                      fontSize: '0.7rem',
-                      color: '#0f172a'
-                    }}
-                    title="Bấm hoặc kéo để xoay góc nghiêng ghi chú"
-                  >
-                    <RotateCw size={11} />
-                    <span>{rotation}°</span>
+                  {/* Clean Rotation Step Controls: -5°, 0°, +5° */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'rgba(0,0,0,0.06)', borderRadius: '12px', padding: '2px 4px' }}>
+                    <button 
+                      onClick={(e) => handleRotateStep(e, note.id, rotation, -5)}
+                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.7rem', padding: '1px 3px', color: '#1e293b', borderRadius: '4px' }}
+                      title="Xoay nghiêng trái (-5°)"
+                    >
+                      ↺ -5°
+                    </button>
+
+                    <button 
+                      onClick={(e) => handleRotateStep(e, note.id, rotation, 0, true)}
+                      style={{ 
+                        border: 'none', 
+                        background: rotation === 0 ? '#38bdf8' : 'rgba(0,0,0,0.1)', 
+                        color: rotation === 0 ? '#fff' : '#0f172a',
+                        cursor: 'pointer', 
+                        fontSize: '0.68rem', 
+                        padding: '1px 5px', 
+                        borderRadius: '8px',
+                        fontWeight: 700
+                      }}
+                      title="Bấm để đặt lại góc 0° (Thẳng)"
+                    >
+                      {rotation}°
+                    </button>
+
+                    <button 
+                      onClick={(e) => handleRotateStep(e, note.id, rotation, 5)}
+                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '0.7rem', padding: '1px 3px', color: '#1e293b', borderRadius: '4px' }}
+                      title="Xoay nghiêng phải (+5°)"
+                    >
+                      ↻ +5°
+                    </button>
                   </div>
                 </div>
 
                 {/* Note Text */}
-                <div style={{ flex: 1, wordBreak: 'break-word', lineHeight: 1.3 }}>
+                <div style={{ flex: 1, wordBreak: 'break-word', lineHeight: 1.35, fontSize: '0.92rem', color: '#1e293b', fontWeight: 500 }}>
                   📌 {note.text}
                 </div>
 
                 {/* Bottom Right Corner Resize Handle (↘️) */}
                 <div 
-                  onMouseDown={(e) => handleResizeMouseDown(e, note.id, width, height)}
+                  onMouseDown={(e) => handleResizeStart(e, note.id, width, height)}
+                  onTouchStart={(e) => handleResizeStart(e, note.id, width, height)}
                   style={{
                     position: 'absolute',
                     bottom: '2px',
                     right: '4px',
-                    width: '16px',
-                    height: '16px',
+                    width: '18px',
+                    height: '18px',
                     cursor: 'se-resize',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#64748b',
-                    opacity: 0.7
+                    opacity: 0.75,
+                    touchAction: 'none'
                   }}
                   title="Kéo góc này để thay đổi kích thước to/nhỏ ghi chú"
                 >
-                  <Maximize2 size={12} style={{ transform: 'rotate(90deg)' }} />
+                  <Maximize2 size={13} style={{ transform: 'rotate(90deg)' }} />
                 </div>
 
               </div>
@@ -382,5 +420,6 @@ export default function CanvasEditor({
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }

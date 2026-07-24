@@ -8,7 +8,7 @@ import TemplateSelector from './components/TemplateSelector.jsx';
 import IconPickerModal from './components/IconPickerModal.jsx';
 import View3DModal from './components/View3DModal.jsx';
 import { toPng } from 'html-to-image';
-import { Image as ImageIcon, Edit3, PenTool, Sparkles } from 'lucide-react';
+import { Image as ImageIcon, Edit3, PenTool, Sparkles, Eye } from 'lucide-react';
 
 const DEFAULT_DOC = {
   title: 'HỒ SƠ',
@@ -66,30 +66,35 @@ export default function App() {
   const [iconCallback, setIconCallback] = useState(null);
   const [is3DModalOpen, setIs3DModalOpen] = useState(false);
 
+  const [mobileView, setMobileView] = useState('editor'); // 'editor' or 'preview'
+
   const docRef = useRef(null);
   const viewportRef = useRef(null);
 
   // Auto-fit calculate scale to fit all 4 corners of document cleanly inside viewport
-  const autoFitDocument = () => {
+  const autoFitDocument = useCallback(() => {
     if (!viewportRef.current) return;
     const viewportRect = viewportRef.current.getBoundingClientRect();
     const docWidth = orientation === 'portrait' ? 650 : 960;
-    const docHeight = orientation === 'portrait' ? 940 : 680;
+    const docHeight = orientation === 'portrait' ? 920 : 650;
 
-    const availableWidth = viewportRect.width - 60;
-    const availableHeight = viewportRect.height - 60;
+    // Available space inside viewport minus padding margins (40px)
+    const availableWidth = Math.max(280, viewportRect.width - 36);
+    const availableHeight = Math.max(320, viewportRect.height - 36);
 
     const scaleX = availableWidth / docWidth;
     const scaleY = availableHeight / docHeight;
 
-    const computedScale = Math.max(0.35, Math.min(1.1, Math.min(scaleX, scaleY)));
+    const computedScale = Math.max(0.28, Math.min(1.0, Math.min(scaleX, scaleY)));
     setZoomScale(+computedScale.toFixed(2));
-  };
+  }, [orientation]);
 
-  // Recalculate auto fit on orientation change
+  // Recalculate auto fit on orientation or window resize change
   useEffect(() => {
     autoFitDocument();
-  }, [orientation]);
+    window.addEventListener('resize', autoFitDocument);
+    return () => window.removeEventListener('resize', autoFitDocument);
+  }, [autoFitDocument]);
 
   // Handle Export Image
   const handleExportPNG = async () => {
@@ -153,10 +158,31 @@ export default function App() {
         onOpenTemplates={() => setIsTemplateModalOpen(true)}
       />
 
+      {/* Mobile Screen Navigation Segment Switcher */}
+      <div className="mobile-view-toggle">
+        <button 
+          className={`mobile-tab-btn ${mobileView === 'editor' ? 'active' : ''}`}
+          onClick={() => setMobileView('editor')}
+        >
+          <Edit3 size={16} />
+          <span>Chỉnh Sửa</span>
+        </button>
+        <button 
+          className={`mobile-tab-btn ${mobileView === 'preview' ? 'active' : ''}`}
+          onClick={() => {
+            setMobileView('preview');
+            setTimeout(autoFitDocument, 100);
+          }}
+        >
+          <Eye size={16} />
+          <span>Xem Hồ Sơ</span>
+        </button>
+      </div>
+
       {/* Main Studio Body */}
       <div className="studio-body">
         {/* Left Sidebar Panel */}
-        <aside className="sidebar-panel">
+        <aside className={`sidebar-panel ${mobileView === 'preview' ? 'mobile-hidden' : ''}`}>
           <div className="tab-buttons">
             <button 
               className={`tab-btn ${activeTab === 'editor' ? 'active' : ''}`}
@@ -213,7 +239,7 @@ export default function App() {
         </aside>
 
         {/* Center Live Document Viewport */}
-        <main ref={viewportRef} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+        <main ref={viewportRef} className={`canvas-main ${mobileView === 'editor' ? 'mobile-hidden' : ''}`} style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
           <CanvasEditor 
             docRef={docRef}
             docData={docData}
