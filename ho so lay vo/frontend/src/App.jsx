@@ -76,24 +76,42 @@ export default function App() {
     if (!viewportRef.current) return;
     const viewportRect = viewportRef.current.getBoundingClientRect();
     const docWidth = orientation === 'portrait' ? 650 : 960;
-    const docHeight = orientation === 'portrait' ? 920 : 650;
+    const docHeight = orientation === 'portrait' ? 950 : 680;
 
-    // Available space inside viewport minus padding margins (40px)
-    const availableWidth = Math.max(280, viewportRect.width - 36);
-    const availableHeight = Math.max(320, viewportRect.height - 36);
+    // Available space inside viewport minus margins
+    const availableWidth = Math.max(200, viewportRect.width - 24);
+    const availableHeight = Math.max(200, viewportRect.height - 24);
+
+    if (availableWidth <= 0 || availableHeight <= 0) return;
 
     const scaleX = availableWidth / docWidth;
     const scaleY = availableHeight / docHeight;
 
-    const computedScale = Math.max(0.28, Math.min(1.0, Math.min(scaleX, scaleY)));
+    const computedScale = Math.max(0.2, Math.min(1.0, Math.min(scaleX, scaleY)));
     setZoomScale(+computedScale.toFixed(2));
   }, [orientation]);
 
-  // Recalculate auto fit on orientation or window resize change
+  // Recalculate auto fit on mount, orientation change, or viewport resize
   useEffect(() => {
     autoFitDocument();
+    const timer1 = setTimeout(autoFitDocument, 50);
+    const timer2 = setTimeout(autoFitDocument, 300);
+
+    let observer;
+    if (viewportRef.current && typeof window !== 'undefined' && window.ResizeObserver) {
+      observer = new ResizeObserver(() => {
+        autoFitDocument();
+      });
+      observer.observe(viewportRef.current);
+    }
+
     window.addEventListener('resize', autoFitDocument);
-    return () => window.removeEventListener('resize', autoFitDocument);
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (observer) observer.disconnect();
+      window.removeEventListener('resize', autoFitDocument);
+    };
   }, [autoFitDocument]);
 
   // Handle Export Image

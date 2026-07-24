@@ -133,7 +133,7 @@ export default function CanvasEditor({
   const scaledHeight = docHeight * zoomScale;
 
   return (
-    <div className="canvas-viewport" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: '24px 12px 60px 12px' }}>
+    <div className="canvas-viewport" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100%', overflow: 'auto', padding: '16px', boxSizing: 'border-box' }}>
       {/* Centered Document Wrapper ensuring all 4 corners are clearly visible */}
       <div 
         style={{
