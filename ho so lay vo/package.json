@@ -4,6 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "npx concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\"",
-    "start": "npx concurrently \"npm --prefix backend start\" \"npm --prefix frontend run dev\""
+    "start": "node backend/server.js",
+    "build": "cd frontend && npm install && npm run build"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
   }
 }

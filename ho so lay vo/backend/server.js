@@ -14,9 +14,22 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  } catch (err) {
+    console.warn('Could not create uploads directory (read-only filesystem or serverless)');
+  }
 }
 app.use('/uploads', express.static(uploadsDir));
+
+// Serve static frontend in production (Docker or built SPA)
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+const altDistPath = path.join(__dirname, 'dist');
+const activeDist = fs.existsSync(frontendDistPath) ? frontendDistPath : (fs.existsSync(altDistPath) ? altDistPath : null);
+
+if (activeDist) {
+  app.use(express.static(activeDist));
+}
 
 // Storage configuration for Multer
 const storage = multer.diskStorage({
@@ -235,6 +248,21 @@ app.delete('/api/profiles/:id', (req, res) => {
   res.json({ success: true, message: 'Đã xóa hồ sơ thành công!' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server Node.js backend đang chạy tại http://localhost:${PORT}`);
+// SPA Fallback: Redirect all non-API routes to index.html when dist exists
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+    return next();
+  }
+  if (activeDist && fs.existsSync(path.join(activeDist, 'index.html'))) {
+    return res.sendFile(path.join(activeDist, 'index.html'));
+  }
+  res.json({ message: 'Ho So Backend API is running!' });
 });
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server Node.js backend đang chạy tại http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
